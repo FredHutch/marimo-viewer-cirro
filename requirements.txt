@@ -1,0 +1,4 @@
+cirro
+pandas
+plotly
+marimo
