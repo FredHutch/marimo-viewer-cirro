@@ -7,7 +7,7 @@ jobs:
 
             - name: 📄 Export notebook
               run: |
-                  marimo export html-wasm diffexp.marimo.py -o static --mode run
+                  marimo export html-wasm app.py -o static --mode run
 
             - name: 📦 Upload Pages Artifact
               uses: actions/upload-pages-artifact@v3
