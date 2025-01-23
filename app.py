@@ -11,19 +11,34 @@ def _():
 
 
 @app.cell
-def _(mo):
-    import cirro
-    return cirro
+def _():
+    import micropip
+    return micropip
 
 
 @app.cell
-def _(mo):
+def _(mo, micropip):
     with mo.status.spinner("Loading dependencies"):
+        await micropip.install("cirro")
         from cirro import DataPortal
         from cirro.config import AppConfig, list_tenants
         from cirro import CirroApi, DataPortal
         from cirro import DataPortalProject, DataPortalDataset
         from cirro.auth.device_code import DeviceCodeAuth
+    return (
+        AppConfig,
+        CirroApi,
+        DataPortal,
+        DataPortalDataset,
+        DataPortalProject,
+        DeviceCodeAuth,
+        list_tenants,
+    )
+
+
+@app.cell
+def _(mo):
+    with mo.status.spinner("Loading dependencies"):
         from io import StringIO
         from threading import Thread
         from queue import Queue
@@ -33,18 +48,11 @@ def _(mo):
         import numpy as np
         from functools import lru_cache
     return (
-        AppConfig,
-        CirroApi,
-        DataPortal,
-        DataPortalDataset,
-        DataPortalProject,
-        DeviceCodeAuth,
         Dict,
         Optional,
         Queue,
         StringIO,
         Thread,
-        list_tenants,
         lru_cache,
         np,
         px,
