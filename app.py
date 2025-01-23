@@ -12,6 +12,12 @@ def _():
 
 @app.cell
 def _(mo):
+    import cirro
+    return cirro
+
+
+@app.cell
+def _(mo):
     with mo.status.spinner("Loading dependencies"):
         from cirro import DataPortal
         from cirro.config import AppConfig, list_tenants
