@@ -1,9 +1,12 @@
+on: push
+
 jobs:
     build:
         runs-on: ubuntu-latest
 
         steps:
-            # ... checkout and install dependencies
+            - name: Checkout
+              uses: actions/checkout@v3
 
             - name: 📄 Export notebook
               run: |
