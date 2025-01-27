@@ -34,9 +34,9 @@ async def _(micropip, mo):
                 "botocore==1.36.3"
             ], verbose=True)
             print('added boto 1.36.3')
-            await micropip.install(["cirro>=1.2.12"], verbose=True)
+            await micropip.install(["cirro>=1.2.13"], verbose=True)
             print('added cirro')
-        import cirro # Note that this still fails in Pyodide due to the fcntl dependency
+        import cirro
     return (cirro,)
 
 
