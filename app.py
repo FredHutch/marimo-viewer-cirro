@@ -12,14 +12,37 @@ def _():
 
 @app.cell
 def _():
-    import micropip
-    return micropip
+    import sys
+
+    if "pyodide" in sys.modules:
+        import micropip
+    else:
+        micropip = None
+    return micropip, sys
 
 
 @app.cell
-def _(mo, micropip):
+async def _(micropip, mo):
     with mo.status.spinner("Loading dependencies"):
-        await micropip.install("cirro")
+        if micropip is not None:
+            print("Installing via micropip")
+            await micropip.install("ssl")
+            await micropip.install(["urllib3==2.3.0"])
+            print('added urllib3==2.3.0')
+            await micropip.install([
+                "boto3==1.36.3",
+                "botocore==1.36.3"
+            ], verbose=True)
+            print('added boto 1.36.3')
+            await micropip.install(["cirro>=1.2.12"], verbose=True)
+            print('added cirro')
+        import cirro # Note that this still fails in Pyodide due to the fcntl dependency
+    return (cirro,)
+
+
+@app.cell
+def _(mo):
+    with mo.status.spinner("Loading dependencies"):
         from cirro import DataPortal
         from cirro.config import AppConfig, list_tenants
         from cirro import CirroApi, DataPortal
@@ -47,17 +70,7 @@ def _(mo):
         import plotly.express as px
         import numpy as np
         from functools import lru_cache
-    return (
-        Dict,
-        Optional,
-        Queue,
-        StringIO,
-        Thread,
-        lru_cache,
-        np,
-        px,
-        sleep,
-    )
+    return Dict, Optional, Queue, StringIO, Thread, lru_cache, np, px, sleep
 
 
 @app.cell
