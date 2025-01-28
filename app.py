@@ -5,6 +5,12 @@ app = marimo.App(width="medium")
 
 
 @app.cell
+def _(mo):
+    mo.md(r"""# Differential Expression Viewer""")
+    return
+
+
+@app.cell
 def _():
     import marimo as mo
     return (mo,)
@@ -69,6 +75,7 @@ def _(mo):
         from time import sleep
         from typing import Dict, Optional
         import plotly.express as px
+        import pandas as pd
         import numpy as np
         from functools import lru_cache
         from io import BytesIO
@@ -84,6 +91,7 @@ def _(mo):
         base64,
         lru_cache,
         np,
+        pd,
         px,
         quote_plus,
         sleep,
@@ -94,35 +102,7 @@ def _(mo):
 def _(mo):
     # Get and set the query parameters
     query_params = mo.query_params()
-
-    # Set up a state elements for user inputs selecting the data source,
-    # which by default will use values from query_params
-    get_domain, set_domain = mo.state(query_params.get("domain"))
-    get_project, set_project = mo.state(query_params.get("project"))
-    get_dataset, set_dataset = mo.state(query_params.get("dataset"))
-    get_file, set_file = mo.state(query_params.get("file"))
-    get_sep, set_sep = mo.state(query_params.get("sep", "Comma"))
-    get_url, set_url = mo.state(query_params.get("url"))
-
-    # Set up a state element for the cirro SDK client
-    get_client, set_client = mo.state(None)
-    return (
-        get_client,
-        get_dataset,
-        get_domain,
-        get_file,
-        get_project,
-        get_sep,
-        get_url,
-        query_params,
-        set_client,
-        set_dataset,
-        set_domain,
-        set_file,
-        set_project,
-        set_sep,
-        set_url,
-    )
+    return (query_params,)
 
 
 @app.cell
@@ -147,26 +127,65 @@ def _(list_tenants):
 
 
 @app.cell
-def _(get_domain, mo, query_params, set_domain, tenants_by_name):
-    # Let the user select which tenant to log in to (using displayName),
-    # and once it is selected, remove the UI element
-    def set_domain_and_query_params(selection):
-        set_domain(selection["domain"])
-        query_params.set("domain", selection["domain"])
+def _(mo):
+    mo.md(r"""## Load Data""")
+    return
 
-    if get_domain() is None:
-        domain_dropdown = mo.ui.dropdown(
-            options=tenants_by_name,
-            on_change=set_domain_and_query_params,
-            label="Select Organization",
+
+@app.cell
+def _(mo, query_params):
+    # Give the user the option to load data from a URL or from Cirro
+    # If a Cirro domain is provided in query params, then that will be the default
+    data_source_ui = mo.ui.radio(
+        {
+            "URL": "url",
+            "Cirro": "cirro"
+        },
+        label="Read Data From",
+        value=("Cirro" if query_params.get("domain") is not None else "URL")
+    )
+    data_source_ui
+    return (data_source_ui,)
+
+
+@app.cell
+def _(data_source_ui, mo, query_params):
+    # Give the user the option to load data from a URL
+    if data_source_ui.value == "url":
+        url_ui = mo.ui.text(
+            label="Load Data from URL (CSV)",
+            placeholder="--",
+            value=query_params.get("url", ""),
+            on_change=lambda v: query_params.set("url", v)
         )
-        domain_dropdown_ui = mo.center(domain_dropdown)
     else:
-        domain_dropdown = None
-        domain_dropdown_ui = None
+        url_ui = None
+    url_ui
+    return (url_ui,)
 
-    domain_dropdown_ui
-    return domain_dropdown, domain_dropdown_ui, set_domain_and_query_params
+
+@app.cell
+def _(data_source_ui, domain_to_name, mo, query_params, tenants_by_name):
+    # If Cirro is selected, let the user select which tenant to log in to (using displayName)
+    if data_source_ui.value == "cirro":
+        domain_ui = mo.ui.dropdown(
+            options=tenants_by_name,
+            value=domain_to_name(query_params.get("domain")),
+            on_change=lambda i: query_params.set("domain", i["domain"]),
+            label="Load Data from Cirro",
+        )
+    else:
+        domain_ui = None
+
+    domain_ui
+    return (domain_ui,)
+
+
+@app.cell
+def _(mo):
+    # Use a state element to manage the Cirro client object
+    get_client, set_client = mo.state(None)
+    return get_client, set_client
 
 
 @app.cell
@@ -177,8 +196,9 @@ def _(
     DeviceCodeAuth,
     Queue,
     StringIO,
+    data_source_ui,
+    domain_ui,
     get_client,
-    get_domain,
     mo,
     sleep,
 ):
@@ -230,9 +250,10 @@ def _(
         return prompt_md, cirro_login_thread, client_queue
 
 
-    if get_client() is None:
+    # If the user selected Cirro as the source of data, and a domain is selected
+    if get_client() is None and data_source_ui.value == "cirro" and domain_ui.value is not None:
         with mo.status.spinner("Authenticating"):
-            prompt_md, cirro_login_thread, client_queue = cirro_login(get_domain())
+            prompt_md, cirro_login_thread, client_queue = cirro_login(domain_ui.value["domain"])
         if prompt_md is not None:
             display_link = mo.center(mo.md(prompt_md))
         else:
@@ -256,88 +277,19 @@ def _(
 def _(cirro_login_thread, client_queue, set_client):
     if cirro_login_thread is not None:
         cirro_login_thread.join()
-        _client = client_queue.get()
-        if _client is not None:
-            set_client(_client)
+        set_client(client_queue.get())
     return
 
 
 @app.cell
-def _(get_client, mo):
-    mo.stop(get_client() is None)
-    return
+def _(get_client):
+    client = get_client()
+    return (client,)
 
 
 @app.cell
-def _(get_client, mo):
-    # Set the list of projects available to the user
-    if get_client() is not None:
-        projects = get_client().list_projects()
-        projects.sort(key=lambda i: i.name)
-    else:
-        mo.stop(get_client() is None)
-    return (projects,)
-
-
-@app.cell
-def _(get_client, get_dataset, get_project, set_dataset):
-    # Get the list of datasets available to the user
-    if get_project() is None:
-        datasets = []
-    else:
-        # Filter the list of datasets by type (process_id)
-        datasets = [
-            dataset
-            for dataset in get_client().get_project_by_id(get_project()).list_datasets()
-            if dataset.process_id in [
-                "process-hutch-differential-expression-1_0",
-                "process-hutch-differential-expression-custom-1_0",
-                "differential-expression-table",
-                "process-nf-core-differentialabundance-1_5"
-            ]
-        ]
-        if get_dataset() not in [ds.id for ds in datasets]:
-            set_dataset(None)
-    return (datasets,)
-
-
-@app.cell
-def _(get_client, get_dataset, get_file, get_project, set_file):
-    # Get the list of files within the selected dataset
-    if get_dataset() is None:
-        file_list = []
-    else:
-        file_list = [
-            file.name
-            for file in (
-                get_client()
-                .get_project_by_id(get_project())
-                .get_dataset_by_id(get_dataset())
-                .list_files()
-            )
-        ]
-        if get_file() not in file_list:
-            set_file(None)
-    return (file_list,)
-
-
-@app.cell
-def _(
-    datasets,
-    file_list,
-    get_dataset,
-    get_file,
-    get_project,
-    get_sep,
-    mo,
-    projects,
-    set_dataset,
-    set_file,
-    set_project,
-    set_sep,
-):
-    # Let the user select the project, dataset, and file from Cirro containing the data to plot
-
+def _():
+    # Helper functions for dealing with lists of objects that may be accessed by id or name
     def id_to_name(obj_list: list, id: str) -> str:
         if obj_list is not None:
             return {i.id: i.name for i in obj_list}.get(id)
@@ -348,69 +300,145 @@ def _(
             return {i.name: i.id for i in obj_list}
         else:
             return {}
+    return id_to_name, name_to_id
 
 
-    source_info = (
-        mo.md("""
-    ## Source Data
-    Project: {project}
+@app.cell
+def _(client):
+    # Set the list of projects available to the user
+    if client is not None:
+        projects = client.list_projects()
+        projects.sort(key=lambda i: i.name)
+    else:
+        projects = None
+    return (projects,)
 
-    Dataset: {dataset} 
 
-    Table: {file} ({sep} Separated Values)
-        """)
-        .batch(
-            project=mo.ui.dropdown(
-                value=id_to_name(projects, get_project()),
-                options=name_to_id(projects),
-                on_change=set_project
-            ),
-            dataset=mo.ui.dropdown(
-                value=id_to_name(datasets, get_dataset()),
-                options=name_to_id(datasets),
-                on_change=set_dataset
-            ),
-            file=mo.ui.dropdown(
-                value=get_file(),
-                options=file_list,
-                on_change=set_file
-            ),
-            sep=mo.ui.dropdown(
-                options=["Comma", "Tab", "Space"],
-                value=get_sep(),
-                on_change=set_sep
-            )
+@app.cell
+def _(id_to_name, mo, name_to_id, projects, query_params):
+    # Let the user select which project to get data from
+    if projects is not None:
+        project_ui=mo.ui.dropdown(
+            value=id_to_name(projects, query_params.get("project")),
+            options=name_to_id(projects),
+            on_change=lambda i: query_params.set("project", i)
         )
+    else:
+        project_ui = None
+    project_ui
+    return (project_ui,)
+
+
+@app.cell
+def _(client, project_ui):
+    # Get the list of datasets available to the user
+    if client is None or project_ui is None or project_ui.value is None:
+        datasets = None
+    else:
+        # Filter the list of datasets by type (process_id)
+        datasets = [
+            dataset
+            for dataset in client.get_project_by_id(project_ui.value).list_datasets()
+            if dataset.process_id in [
+                "process-hutch-differential-expression-1_0",
+                "process-hutch-differential-expression-custom-1_0",
+                "differential-expression-table",
+                "process-nf-core-differentialabundance-1_5"
+            ]
+        ]
+    return (datasets,)
+
+
+@app.cell
+def _(datasets, id_to_name, mo, name_to_id, query_params):
+    # Let the user select which dataset to get data from
+    if datasets is not None:
+        dataset_ui=mo.ui.dropdown(
+            value=id_to_name(datasets, query_params.get("dataset")),
+            options=name_to_id(datasets),
+            on_change=lambda i: query_params.set("dataset", i)
+        )
+    else:
+        dataset_ui = None
+    dataset_ui
+    return (dataset_ui,)
+
+
+@app.cell
+def _(client, dataset_ui, project_ui):
+    # Get the list of files within the selected dataset
+    if client is None or dataset_ui is None or dataset_ui.value is None:
+        file_list = None
+    else:
+        file_list = [
+            file.name
+            for file in (
+                client
+                .get_project_by_id(project_ui.value)
+                .get_dataset_by_id(dataset_ui.value)
+                .list_files()
+            )
+        ]
+    return (file_list,)
+
+
+@app.cell
+def _(file_list, mo, query_params):
+    # Let the user select which file to get data from
+    if file_list is not None:
+        file_ui=mo.ui.dropdown(
+            value=(query_params.get("file") if query_params.get("file") in file_list else None),
+            options=file_list,
+            on_change=lambda i: query_params.set("file", i)
+        )
+    else:
+        file_ui = None
+    file_ui
+    return (file_ui,)
+
+
+@app.cell
+def _(mo, query_params):
+    # Let the user provide information about the file format
+    sep_ui = mo.ui.dropdown(
+        ["comma", "tab", "space"],
+        value=query_params.get("sep", "comma"),
+        label="Field Separator"
     )
-    source_info
-    return id_to_name, name_to_id, source_info
+    sep_ui
+    return (sep_ui,)
 
 
 @app.cell
 def _(
-    get_client,
-    get_dataset,
-    get_file,
-    get_project,
-    get_sep,
-    source_info,
+    client,
+    data_source_ui,
+    dataset_ui,
+    file_ui,
+    mo,
+    pd,
+    project_ui,
+    sep_ui,
+    url_ui,
 ):
-    # Read the file from Cirro
-    if source_info.value["file"] is not None:
+    # Here is where we read in the table as a DataFrame
+
+    # If the URL was provided
+    if data_source_ui.value == "url" and url_ui is not None and url_ui.value is not None:
+        df = pd.read_csv(url_ui, sep=dict(comma=",", tab="\t", space=" ")[sep_ui.value])
+    elif data_source_ui.value == "cirro" and file_ui is not None and file_ui.value is not None:
         df = (
-            get_client()
-            .get_project_by_id(get_project())
-            .get_dataset_by_id(get_dataset())
+            client
+            .get_project_by_id(project_ui.value)
+            .get_dataset_by_id(dataset_ui.value)
             .list_files()
-            .get_by_name(get_file())
-            .read_csv(sep={
-                "Comma": ",",
-                "Tab": "\t",
-                "Space": " ",
-            }.get(get_sep, ","))
+            .get_by_id(file_ui.value)
+            .read_csv(sep=dict(comma=",", tab="\t", space=" ")[sep_ui.value])
         )
     else:
         df = None
+
+    mo.stop(df is None)
     return (df,)
 
 
@@ -749,17 +777,7 @@ def _(df, mo, params, prepared_df, px):
 
 
 @app.cell
-def _(
-    get_dataset,
-    get_domain,
-    get_file,
-    get_project,
-    get_sep,
-    get_url,
-    mo,
-    params,
-    volcano_fig,
-):
+def _(mo, params, query_params, volcano_fig):
     if volcano_fig is not None:
         permalink = mo.md(
             (
@@ -768,14 +786,13 @@ def _(
                     _query_params="&".join([
                         f"{kw}={str(val)}"
                         for kw, val in {
-                            "domain": get_domain(),
-                            "project": get_project(),
-                            "dataset": get_dataset(),
-                            "file": get_file(),
-                            "sep": get_sep(),
-                            "url": get_url(),
+                            **{
+                                kw: query_params.get(kw)
+                                for kw in ["url", "domain", "project", "dataset", "file"]
+                            },
                             **params
                         }.items()
+                        if val is not None
                     ])
                 )
             )
