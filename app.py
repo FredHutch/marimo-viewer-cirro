@@ -33,6 +33,7 @@ async def _(micropip, mo):
     with mo.status.spinner("Loading dependencies"):
         if micropip is not None:
             print("Installing via micropip")
+            await micropip.install("plotly<6.0.0")
             await micropip.install("ssl")
             await micropip.install(["urllib3==2.3.0"])
             print('added urllib3==2.3.0')
@@ -81,6 +82,9 @@ def _(mo):
         from io import BytesIO
         import base64
         from urllib.parse import quote_plus
+        import threading
+        # Override the Thread class with a custom Thread class
+        threading.Thread = mo.Thread
     return (
         BytesIO,
         Dict,
@@ -95,6 +99,7 @@ def _(mo):
         px,
         quote_plus,
         sleep,
+        threading,
     )
 
 
@@ -200,6 +205,7 @@ def _(
     domain_ui,
     get_client,
     mo,
+    threading,
     sleep,
 ):
     def _cirro_login(auth_io: StringIO, base_url: str, client_queue: Queue):
@@ -231,7 +237,7 @@ def _(
 
         auth_io = StringIO()
         client_queue = Queue()
-        cirro_login_thread = mo.Thread(
+        cirro_login_thread = threading.Thread(
             target=_cirro_login,
             args=(auth_io, domain, client_queue)
         )
