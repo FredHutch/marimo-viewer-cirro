@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.10.14"
+__generated_with = "0.10.17"
 app = marimo.App(width="medium")
 
 
@@ -14,6 +14,7 @@ def _():
 def _():
     import sys
 
+    # If the script is running in WASM (instead of local development mode), load micropip
     if "pyodide" in sys.modules:
         import micropip
     else:
@@ -70,7 +71,23 @@ def _(mo):
         import plotly.express as px
         import numpy as np
         from functools import lru_cache
-    return Dict, Optional, Queue, StringIO, Thread, lru_cache, np, px, sleep
+        from io import BytesIO
+        import base64
+        from urllib.parse import quote_plus
+    return (
+        BytesIO,
+        Dict,
+        Optional,
+        Queue,
+        StringIO,
+        Thread,
+        base64,
+        lru_cache,
+        np,
+        px,
+        quote_plus,
+        sleep,
+    )
 
 
 @app.cell
@@ -252,11 +269,13 @@ def _(get_client, mo):
 
 
 @app.cell
-def _(get_client):
+def _(get_client, mo):
     # Set the list of projects available to the user
     if get_client() is not None:
         projects = get_client().list_projects()
         projects.sort(key=lambda i: i.name)
+    else:
+        mo.stop(get_client() is None)
     return (projects,)
 
 
@@ -320,7 +339,16 @@ def _(
     # Let the user select the project, dataset, and file from Cirro containing the data to plot
 
     def id_to_name(obj_list: list, id: str) -> str:
-        return {i.id: i.name for i in obj_list}.get(id)
+        if obj_list is not None:
+            return {i.id: i.name for i in obj_list}.get(id)
+
+
+    def name_to_id(obj_list: list) -> dict:
+        if obj_list is not None:
+            return {i.name: i.id for i in obj_list}
+        else:
+            return {}
+
 
     source_info = (
         mo.md("""
@@ -334,12 +362,12 @@ def _(
         .batch(
             project=mo.ui.dropdown(
                 value=id_to_name(projects, get_project()),
-                options={project.name: project.id for project in projects},
+                options=name_to_id(projects),
                 on_change=set_project
             ),
             dataset=mo.ui.dropdown(
                 value=id_to_name(datasets, get_dataset()),
-                options={dataset.name: dataset.id for dataset in datasets},
+                options=name_to_id(datasets),
                 on_change=set_dataset
             ),
             file=mo.ui.dropdown(
@@ -355,7 +383,7 @@ def _(
         )
     )
     source_info
-    return id_to_name, source_info
+    return id_to_name, name_to_id, source_info
 
 
 @app.cell
@@ -384,12 +412,6 @@ def _(
     else:
         df = None
     return (df,)
-
-
-@app.cell
-def _(df):
-    print(df)
-    return
 
 
 @app.cell
@@ -551,6 +573,17 @@ def _(df, mo, np, params):
 
 
 @app.cell
+def _(mo, volcano_fig):
+    if volcano_fig is not None:
+        volcano_header = mo.md("## Volcano Plot")
+    else:
+        volcano_header = None
+
+    volcano_header
+    return (volcano_header,)
+
+
+@app.cell
 def _(df, max_pval, min_lfc, mo, np, params, prepared_df, px):
     if df is not None:
         with mo.status.spinner("Making plot"):
@@ -596,17 +629,25 @@ def _(df, max_pval, min_lfc, mo, np, params, prepared_df, px):
 
 
 @app.cell
-def _(BytesIO, StringIO, base64, fig, mo, st, volcano_fig):
+def _(mo, volcano_fig):
     if volcano_fig is not None:
-        mybuff = StringIO()
-        fig.write_html(mybuff, include_plotlyjs='cdn')
-        mybuff = BytesIO(mybuff.getvalue().encode())
-        b64 = base64.b64encode(mybuff.read()).decode()
-        href = f'<a href="data:text/html;charset=utf-8;base64, {b64}" download="plot.html">Download plot</a>'
-        st.markdown(href, unsafe_allow_html=True)
+        volcano_download = mo.download(volcano_fig.to_image(), label="Download (png)")
+    else:
+        volcano_download = None
 
-        mo.download(volcano_fig.to_image())
-    return b64, href, mybuff
+    volcano_download
+    return (volcano_download,)
+
+
+@app.cell
+def _(ma_fig, mo):
+    if ma_fig is not None:
+        ma_header = mo.md("## M-A Plot")
+    else:
+        ma_header = None
+
+    ma_header
+    return (ma_header,)
 
 
 @app.cell
@@ -655,6 +696,28 @@ def _(df, min_lfc, mo, params, prepared_df, px):
 
 
 @app.cell
+def _(ma_fig, mo):
+    if ma_fig is not None:
+        ma_download = mo.download(ma_fig.to_image(), label="Download (png)")
+    else:
+        ma_download = None
+
+    ma_download
+    return (ma_download,)
+
+
+@app.cell
+def _(mo, three_dim_fig):
+    if three_dim_fig is not None:
+        three_dim_header = mo.md("## 3D Plot")
+    else:
+        three_dim_header = None
+
+    three_dim_header
+    return (three_dim_header,)
+
+
+@app.cell
 def _(df, mo, params, prepared_df, px):
     if df is not None:
         with mo.status.spinner("Making plot"):
@@ -677,26 +740,50 @@ def _(df, mo, params, prepared_df, px):
                 width=params["width"],
                 height=params["height"]
             )
-            # three_dim_fig.update_layout(
-            #     plot_bgcolor="white",  # Set plot background color
-            #     paper_bgcolor="white", # Set paper background color
-            #     xaxis=dict(
-            #         showgrid=True,  # Show grid lines on the x-axis
-            #         gridcolor='lightgray'  # Set the color of the grid lines
-            #     ),
-            #     yaxis=dict(
-            #         showgrid=True,  # Show grid lines on the y-axis
-            #         gridcolor='lightgray'  # Set the color of the grid lines
-            #     )
-            # )
-            # if min_lfc is not None:
-            #     three_dim_fig.add_vline(min_lfc, line_dash="dash", line_color="grey", opacity=0.5)
-            #     three_dim_fig.add_vline(-min_lfc, line_dash="dash", line_color="grey", opacity=0.5)
+
     else:
         three_dim_fig = None
 
     three_dim_fig
     return (three_dim_fig,)
+
+
+@app.cell
+def _(
+    get_dataset,
+    get_domain,
+    get_file,
+    get_project,
+    get_sep,
+    get_url,
+    mo,
+    params,
+    volcano_fig,
+):
+    if volcano_fig is not None:
+        permalink = mo.md(
+            (
+                "[Permalink](https://fredhutch.github.io/differential-expression-viewer?{_query_params})"
+                .format(
+                    _query_params="&".join([
+                        f"{kw}={str(val)}"
+                        for kw, val in {
+                            "domain": get_domain(),
+                            "project": get_project(),
+                            "dataset": get_dataset(),
+                            "file": get_file(),
+                            "sep": get_sep(),
+                            "url": get_url(),
+                            **params
+                        }.items()
+                    ])
+                )
+            )
+        )
+    else:
+        permalink = None
+    permalink
+    return (permalink,)
 
 
 @app.cell

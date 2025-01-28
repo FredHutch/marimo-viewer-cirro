@@ -2,3 +2,4 @@ cirro
 pandas
 plotly
 marimo
+urllib3
