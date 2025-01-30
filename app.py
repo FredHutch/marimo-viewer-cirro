@@ -42,36 +42,17 @@ async def _(micropip, mo):
                 "botocore==1.36.3"
             ], verbose=True)
             print('added boto 1.36.3')
-            await micropip.install(["cirro>=1.2.13"], verbose=True)
+            await micropip.install(["cirro>=1.2.15"], verbose=True)
             print('added cirro')
-        import cirro
-    return (cirro,)
-
-
-@app.cell
-def _(mo):
-    with mo.status.spinner("Loading dependencies"):
-        from cirro import DataPortal
-        from cirro.config import AppConfig, list_tenants
-        from cirro import CirroApi, DataPortal
-        from cirro import DataPortalProject, DataPortalDataset
-        from cirro.auth.device_code import DeviceCodeAuth
-    return (
-        AppConfig,
-        CirroApi,
-        DataPortal,
-        DataPortalDataset,
-        DataPortalProject,
-        DeviceCodeAuth,
-        list_tenants,
-    )
+        from cirro import DataPortalLogin
+        from cirro.config import list_tenants
+    return DataPortalLogin, list_tenants
 
 
 @app.cell
 def _(mo):
     with mo.status.spinner("Loading dependencies"):
         from io import StringIO
-        from threading import Thread
         from queue import Queue
         from time import sleep
         from typing import Dict, Optional
@@ -82,16 +63,12 @@ def _(mo):
         from io import BytesIO
         import base64
         from urllib.parse import quote_plus
-        import threading
-        # Override the Thread class with a custom Thread class
-        threading.Thread = mo.Thread
     return (
         BytesIO,
         Dict,
         Optional,
         Queue,
         StringIO,
-        Thread,
         base64,
         lru_cache,
         np,
@@ -99,7 +76,6 @@ def _(mo):
         px,
         quote_plus,
         sleep,
-        threading,
     )
 
 
@@ -154,36 +130,34 @@ def _(mo, query_params):
 
 
 @app.cell
+def _(mo):
+    # Use a state element to update the DataFrame once it has been read in
+    get_df, set_df = mo.state(None)
+    return get_df, set_df
+
+
+@app.cell
 def _(data_source_ui, mo, query_params):
-    # Give the user the option to load data from a URL
-    if data_source_ui.value == "url":
-        url_ui = mo.ui.text(
-            label="Load Data from URL (CSV)",
-            placeholder="--",
-            value=query_params.get("url", ""),
-            on_change=lambda v: query_params.set("url", v)
-        )
-    else:
-        url_ui = None
+    # Stop execution if the user did not select the URL option
+    mo.stop(data_source_ui.value != "url")
+
+    # Let the user enter the URL
+    url_ui = mo.ui.text(
+        label="Load Data from URL (CSV)",
+        placeholder="--",
+        value=query_params.get("url", ""),
+        on_change=lambda v: query_params.set("url", v)
+    )
     url_ui
     return (url_ui,)
 
 
 @app.cell
-def _(data_source_ui, domain_to_name, mo, query_params, tenants_by_name):
-    # If Cirro is selected, let the user select which tenant to log in to (using displayName)
-    if data_source_ui.value == "cirro":
-        domain_ui = mo.ui.dropdown(
-            options=tenants_by_name,
-            value=domain_to_name(query_params.get("domain")),
-            on_change=lambda i: query_params.set("domain", i["domain"]),
-            label="Load Data from Cirro",
-        )
-    else:
-        domain_ui = None
-
-    domain_ui
-    return (domain_ui,)
+def _(pd, sep_ui, set_df, url_ui):
+    # If the URL was provided, read it in
+    if url_ui.value is not None and len(url_ui.value) > 0:
+        set_df(pd.read_csv(url_ui.value, sep=dict(comma=",", tab="\t", space=" ")[sep_ui.value]))
+    return
 
 
 @app.cell
@@ -194,102 +168,51 @@ def _(mo):
 
 
 @app.cell
-def _(
-    AppConfig,
-    CirroApi,
-    DataPortal,
-    DeviceCodeAuth,
-    Queue,
-    StringIO,
-    data_source_ui,
-    domain_ui,
-    get_client,
-    mo,
-    threading,
-    sleep,
-):
-    def _cirro_login(auth_io: StringIO, base_url: str, client_queue: Queue):
-        """Process used within a thread to log in to Cirro."""
+def _(data_source_ui, domain_to_name, mo, query_params, tenants_by_name):
+    # If Cirro is not selected, stop any further execution of cells that depend on this output
+    mo.stop(data_source_ui.value != "cirro")
 
-        app_config = AppConfig(base_url=base_url)
-
-        auth_info = DeviceCodeAuth(
-            region=app_config.region,
-            client_id=app_config.client_id,
-            auth_endpoint=app_config.auth_endpoint,
-            enable_cache=False,
-            auth_io=auth_io
-        )
-
-        cirro_client = CirroApi(
-            auth_info=auth_info,
-            base_url=base_url
-        )
-        cirro = DataPortal(
-            client=cirro_client
-        )
-        client_queue.put(cirro)
-
-
-    def cirro_login(domain):
-        if domain is None:
-            return None, None, None
-
-        auth_io = StringIO()
-        client_queue = Queue()
-        cirro_login_thread = threading.Thread(
-            target=_cirro_login,
-            args=(auth_io, domain, client_queue)
-        )
-        cirro_login_thread.start()
-
-        login_string = auth_io.getvalue()
-
-        while len(login_string) == 0 and cirro_login_thread.is_alive():
-            sleep(0.1)
-            login_string = auth_io.getvalue()
-        if login_string is None:
-            return None, None, None
-
-        text, url = login_string.rsplit(" ", 1)
-        prompt_md = f"{text} [{url}]({url})"
-        return prompt_md, cirro_login_thread, client_queue
-
-
-    # If the user selected Cirro as the source of data, and a domain is selected
-    if get_client() is None and data_source_ui.value == "cirro" and domain_ui.value is not None:
-        with mo.status.spinner("Authenticating"):
-            prompt_md, cirro_login_thread, client_queue = cirro_login(domain_ui.value["domain"])
-        if prompt_md is not None:
-            display_link = mo.center(mo.md(prompt_md))
-        else:
-            display_link = None
-    else:
-        display_link = None
-        cirro_login_thread = None
-        client_queue = None
-
-    display_link
-    return (
-        cirro_login,
-        cirro_login_thread,
-        client_queue,
-        display_link,
-        prompt_md,
+    # Let the user select which tenant to log in to (using displayName)
+    domain_ui = mo.ui.dropdown(
+        options=tenants_by_name,
+        value=domain_to_name(query_params.get("domain")),
+        on_change=lambda i: query_params.set("domain", i["domain"]),
+        label="Load Data from Cirro",
     )
+    domain_ui
+    return (domain_ui,)
 
 
 @app.cell
-def _(cirro_login_thread, client_queue, set_client):
-    if cirro_login_thread is not None:
-        cirro_login_thread.join()
-        set_client(client_queue.get())
+def _(DataPortalLogin, domain_ui, get_client, mo):
+    # If the user is not yet logged in, and a domain is selected
+    if get_client() is None and domain_ui.value is not None:
+        with mo.status.spinner("Authenticating"):
+            # Use device code authorization to log in to Cirro
+            cirro_login = DataPortalLogin(base_url=domain_ui.value["domain"])
+            cirro_login_ui = mo.md(cirro_login.auth_message_markdown)
+    else:
+        cirro_login = None
+        cirro_login_ui = None
+
+    mo.stop(cirro_login is None)
+    cirro_login_ui
+    return cirro_login, cirro_login_ui
+
+
+@app.cell
+def _(cirro_login, set_client):
+    # Once the user logs in, set the state for the client object
+    set_client(cirro_login.await_completion())
     return
 
 
 @app.cell
-def _(get_client):
+def _(data_source_ui, get_client, mo):
+    # Get the Cirro client object (but only take action if the user selected Cirro as the input)
     client = get_client()
+    mo.stop(client is None)
+    mo.stop(data_source_ui.value != "cirro")
     return (client,)
 
 
@@ -312,93 +235,79 @@ def _():
 @app.cell
 def _(client):
     # Set the list of projects available to the user
-    if client is not None:
-        projects = client.list_projects()
-        projects.sort(key=lambda i: i.name)
-    else:
-        projects = None
+    projects = client.list_projects()
+    projects.sort(key=lambda i: i.name)
     return (projects,)
 
 
 @app.cell
 def _(id_to_name, mo, name_to_id, projects, query_params):
     # Let the user select which project to get data from
-    if projects is not None:
-        project_ui=mo.ui.dropdown(
-            value=id_to_name(projects, query_params.get("project")),
-            options=name_to_id(projects),
-            on_change=lambda i: query_params.set("project", i)
-        )
-    else:
-        project_ui = None
+    project_ui=mo.ui.dropdown(
+        value=id_to_name(projects, query_params.get("project")),
+        options=name_to_id(projects),
+        on_change=lambda i: query_params.set("project", i)
+    )
     project_ui
     return (project_ui,)
 
 
 @app.cell
-def _(client, project_ui):
+def _(client, mo, project_ui):
     # Get the list of datasets available to the user
-    if client is None or project_ui is None or project_ui.value is None:
-        datasets = None
-    else:
-        # Filter the list of datasets by type (process_id)
-        datasets = [
-            dataset
-            for dataset in client.get_project_by_id(project_ui.value).list_datasets()
-            if dataset.process_id in [
-                "process-hutch-differential-expression-1_0",
-                "process-hutch-differential-expression-custom-1_0",
-                "differential-expression-table",
-                "process-nf-core-differentialabundance-1_5"
-            ]
+    mo.stop(project_ui.value is None)
+
+    # Filter the list of datasets by type (process_id)
+    datasets = [
+        dataset
+        for dataset in client.get_project_by_id(project_ui.value).list_datasets()
+        if dataset.process_id in [
+            "process-hutch-differential-expression-1_0",
+            "process-hutch-differential-expression-custom-1_0",
+            "differential-expression-table",
+            "process-nf-core-differentialabundance-1_5"
         ]
+    ]
     return (datasets,)
 
 
 @app.cell
 def _(datasets, id_to_name, mo, name_to_id, query_params):
     # Let the user select which dataset to get data from
-    if datasets is not None:
-        dataset_ui=mo.ui.dropdown(
-            value=id_to_name(datasets, query_params.get("dataset")),
-            options=name_to_id(datasets),
-            on_change=lambda i: query_params.set("dataset", i)
-        )
-    else:
-        dataset_ui = None
+    dataset_ui=mo.ui.dropdown(
+        value=id_to_name(datasets, query_params.get("dataset")),
+        options=name_to_id(datasets),
+        on_change=lambda i: query_params.set("dataset", i)
+    )
     dataset_ui
     return (dataset_ui,)
 
 
 @app.cell
-def _(client, dataset_ui, project_ui):
+def _(client, dataset_ui, mo, project_ui):
     # Get the list of files within the selected dataset
-    if client is None or dataset_ui is None or dataset_ui.value is None:
-        file_list = None
-    else:
-        file_list = [
-            file.name
-            for file in (
-                client
-                .get_project_by_id(project_ui.value)
-                .get_dataset_by_id(dataset_ui.value)
-                .list_files()
-            )
-        ]
+    mo.stop(dataset_ui.value is None)
+
+    file_list = [
+        file.name
+        for file in (
+            client
+            .get_project_by_id(project_ui.value)
+            .get_dataset_by_id(dataset_ui.value)
+            .list_files()
+        )
+    ]
     return (file_list,)
 
 
 @app.cell
 def _(file_list, mo, query_params):
     # Let the user select which file to get data from
-    if file_list is not None:
-        file_ui=mo.ui.dropdown(
-            value=(query_params.get("file") if query_params.get("file") in file_list else None),
-            options=file_list,
-            on_change=lambda i: query_params.set("file", i)
-        )
-    else:
-        file_ui = None
+    file_ui=mo.ui.dropdown(
+        value=(query_params.get("file") if query_params.get("file") in file_list else None),
+        options=file_list,
+        on_change=lambda i: query_params.set("file", i)
+    )
     file_ui
     return (file_ui,)
 
@@ -416,24 +325,12 @@ def _(mo, query_params):
 
 
 @app.cell
-def _(
-    client,
-    data_source_ui,
-    dataset_ui,
-    file_ui,
-    mo,
-    pd,
-    project_ui,
-    sep_ui,
-    url_ui,
-):
-    # Here is where we read in the table as a DataFrame
+def _(client, dataset_ui, file_ui, project_ui, sep_ui, set_df):
+    # Here is where we read in the table as a DataFrame from Cirro
 
-    # If the URL was provided
-    if data_source_ui.value == "url" and url_ui is not None and url_ui.value is not None:
-        df = pd.read_csv(url_ui, sep=dict(comma=",", tab="\t", space=" ")[sep_ui.value])
-    elif data_source_ui.value == "cirro" and file_ui is not None and file_ui.value is not None:
-        df = (
+    # If the file was selected
+    if file_ui.value is not None:
+        set_df(
             client
             .get_project_by_id(project_ui.value)
             .get_dataset_by_id(dataset_ui.value)
@@ -441,9 +338,13 @@ def _(
             .get_by_id(file_ui.value)
             .read_csv(sep=dict(comma=",", tab="\t", space=" ")[sep_ui.value])
         )
-    else:
-        df = None
+    return
 
+
+@app.cell
+def _(get_df, mo):
+    # Access the state element to get the DataFrame from either the URL or Cirro route
+    df = get_df()
     mo.stop(df is None)
     return (df,)
 
