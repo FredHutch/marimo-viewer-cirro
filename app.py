@@ -1,7 +1,10 @@
 import marimo
 
-__generated_with = "0.10.17"
-app = marimo.App(width="medium")
+__generated_with = "0.11.0"
+app = marimo.App(
+    width="medium",
+    app_title="Differential Expression Viewer"
+)
 
 
 @app.cell
