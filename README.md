@@ -1,6 +1,8 @@
 # Differential Expression Viewer
 Visualization of differential expression results
 
+[![Differential Expression Viewer](https://github.com/fredhutch/differential-expression-viewer/raw/main/assets/screenshot.png)](https://fredhutch.github.io/differential-expression-viewer/?url=https%3A%2F%2Ffredhutch.github.io%2Fdifferential-expression-viewer%2Fpublic%2FDE_results.csv.gz)
+
 ## Background
 
 A useful approach in the analysis of biological systems is to compare the relative
