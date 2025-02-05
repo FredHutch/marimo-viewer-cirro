@@ -31,7 +31,7 @@ def _():
 
 
 @app.cell
-async def _(cirro, micropip, mo, running_in_wasm):
+async def _(micropip, mo, running_in_wasm):
     with mo.status.spinner("Loading dependencies"):
         # If we are running in WASM, some dependencies need to be set up appropriately.
         # This is really just aligning the needs of the app with the default library versions
@@ -70,7 +70,6 @@ async def _(cirro, micropip, mo, running_in_wasm):
         if running_in_wasm:
             from cirro.helpers import pyodide_patch_all
             pyodide_patch_all()
-
     return (
         BytesIO,
         DataPortalFile,
@@ -86,6 +85,7 @@ async def _(cirro, micropip, mo, running_in_wasm):
         np,
         pd,
         px,
+        pyodide_patch_all,
         quote_plus,
         sleep,
     )
@@ -423,7 +423,7 @@ def _(df, guess_column, mo, query_params):
                 )
             ),
             abund_log=mo.ui.checkbox(
-                value=query_params.get("abund_log", True)
+                value=bool(query_params.get("abund_log", True))
             ),
             lfc_cname=mo.ui.dropdown(
                 options=df.columns,
@@ -456,13 +456,13 @@ def _(df, guess_column, mo, query_params):
                 value=query_params.get("theme", "none")
             ),
             width=mo.ui.number(
-                value=query_params.get("width", 800),
+                value=int(query_params.get("width", 800)),
                 start=100,
                 stop=2400,
                 step=10
             ),
             height=mo.ui.number(
-                value=query_params.get("height", 600),
+                value=int(query_params.get("height", 600)),
                 start=100,
                 stop=2400,
                 step=10
