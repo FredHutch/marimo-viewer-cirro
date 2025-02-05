@@ -385,27 +385,31 @@ def _(df, guess_column, mo, query_params):
         mo.md("""
     ## Display Settings
 
-    ### Columns
+    ### Input Data
 
-    - p-values: {pval_cname} (maximum threshold: {max_pval})
-    - log-fold change: {lfc_cname} (minimum threshold (abs): {min_lfc})
-    - mean abundance: {abund_cname} (display on log scale {abund_log})
-    - gene name: {label_cname}
+    {pval_cname}<br>
+    {max_pval}<br>
+    {lfc_cname}<br>
+    {min_lfc}<br>
+    {abund_cname}<br>
+    {abund_log}<br>
+    {label_cname}<br>
 
-    ### Labels
+    ### Display Labels
 
-    - {pval_label}
-    - {lfc_label}
-    - {abund_label}
+    {pval_label}<br>
+    {lfc_label}<br>
+    {abund_label}<br>
 
-    ### Display
+    ### Plot Settings
 
-    - Theme: {theme}
-    - Width: {width}
-    - Height: {height}
+    {theme}
+    {width}
+    {height}
         """)
         .batch(
             pval_cname=mo.ui.dropdown(
+                label="p-value:",
                 options=df.columns,
                 value=query_params.get(
                     'pval_cname',
@@ -413,9 +417,11 @@ def _(df, guess_column, mo, query_params):
                 )
             ),
             max_pval=mo.ui.text(
+                label="max p:",
                 value=query_params.get("max_pval", "0.05")
             ),
             abund_cname=mo.ui.dropdown(
+                label="abundance:",
                 options=df.columns,
                 value=query_params.get(
                     'abund_cname',
@@ -423,9 +429,11 @@ def _(df, guess_column, mo, query_params):
                 )
             ),
             abund_log=mo.ui.checkbox(
+                label="log-scale abundance",
                 value=bool(query_params.get("abund_log", True))
             ),
             lfc_cname=mo.ui.dropdown(
+                label="fold change:",
                 options=df.columns,
                 value=query_params.get(
                     'lfc_cname',
@@ -433,9 +441,11 @@ def _(df, guess_column, mo, query_params):
                 )
             ),
             min_lfc=mo.ui.text(
+                label="min fold change",
                 value=query_params.get("min_lfc", "2")
             ),
             label_cname=mo.ui.dropdown(
+                label="gene name:",
                 options=df.columns,
                 value=query_params.get(
                     'label_cname',
@@ -452,24 +462,27 @@ def _(df, guess_column, mo, query_params):
                 value=query_params.get("abund_label", "Mean Abundance (RPKM)")
             ),
             theme=mo.ui.dropdown(
+                label="Theme:",
                 options=["plotly", "plotly_white", "plotly_dark", "ggplot2", "seaborn", "simple_white", "none"],
                 value=query_params.get("theme", "none")
             ),
             width=mo.ui.number(
-                value=int(query_params.get("width", 800)),
+                label="Width:",
+                value=int(query_params.get("width", 600)),
                 start=100,
                 stop=2400,
                 step=10
             ),
             height=mo.ui.number(
-                value=int(query_params.get("height", 600)),
+                label="Height:",
+                value=int(query_params.get("height", 400)),
                 start=100,
                 stop=2400,
                 step=10
             )
         )
     )
-    params_ui
+    mo.sidebar(params_ui)
     return (params_ui,)
 
 
