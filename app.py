@@ -596,17 +596,6 @@ def _(df, max_pval, min_lfc, mo, np, params, prepared_df, px):
 
 
 @app.cell
-def _(mo, volcano_fig):
-    if volcano_fig is not None:
-        volcano_download = mo.download(volcano_fig.to_html(), label="Download (html)", filename="volcano.html")
-    else:
-        volcano_download = None
-
-    volcano_download
-    return (volcano_download,)
-
-
-@app.cell
 def _(ma_fig, mo):
     if ma_fig is not None:
         ma_header = mo.md("## M-A Plot")
@@ -660,17 +649,6 @@ def _(df, min_lfc, mo, params, prepared_df, px):
 
     ma_fig
     return (ma_fig,)
-
-
-@app.cell
-def _(ma_fig, mo):
-    if ma_fig is not None:
-        ma_download = mo.download(ma_fig.to_html(), label="Download (html)", filename="ma.html")
-    else:
-        ma_download = None
-
-    ma_download
-    return (ma_download,)
 
 
 @app.cell
