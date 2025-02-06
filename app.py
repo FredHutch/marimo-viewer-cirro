@@ -694,6 +694,20 @@ def _(df, mo, params, prepared_df, px):
 
 
 @app.cell
+def _(prepared_df):
+    # Show the DataFrame with the rows passing the filter
+    (
+        prepared_df
+        .query("passes_threshold")
+        .drop(columns=[
+            "passes_threshold",
+            "_neg_log10_pval"
+        ])
+    )
+    return
+
+
+@app.cell
 def _(mo, params, query_params, volcano_fig):
     if volcano_fig is not None:
         permalink = mo.md(
@@ -718,20 +732,6 @@ def _(mo, params, query_params, volcano_fig):
         permalink = None
     permalink
     return (permalink,)
-
-
-@app.cell
-def _(prepared_df):
-    # Show the DataFrame with the rows passing the filter
-    (
-        prepared_df
-        .query("passes_threshold")
-        .drop(columns=[
-            "passes_threshold",
-            "_neg_log10_pval"
-        ])
-    )
-    return
 
 
 @app.cell
