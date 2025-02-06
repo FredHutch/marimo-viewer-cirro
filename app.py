@@ -721,6 +721,20 @@ def _(mo, params, query_params, volcano_fig):
 
 
 @app.cell
+def _(prepared_df):
+    # Show the DataFrame with the rows passing the filter
+    (
+        prepared_df
+        .query("passes_threshold")
+        .drop(columns=[
+            "passes_threshold",
+            "_neg_log10_pval"
+        ])
+    )
+    return
+
+
+@app.cell
 def _():
     return
 
