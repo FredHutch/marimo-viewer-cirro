@@ -6,8 +6,20 @@ app = marimo.App(width="medium", app_title="Differential Expression Viewer")
 
 @app.cell
 def _(mo):
-    mo.md(r"""# Differential Expression Viewer""")
+    mo.md(r"""# CUT&RUN Viewer""")
     return
+
+
+@app.cell
+def _():
+    # Define the types of datasets which can be read in
+    cirro_dataset_type_filter = [
+        "process-hutch-differential-expression-1_0",
+        "process-hutch-differential-expression-custom-1_0",
+        "differential-expression-table",
+        "process-nf-core-differentialabundance-1_5"
+    ]
+    return (cirro_dataset_type_filter,)
 
 
 @app.cell
@@ -126,53 +138,6 @@ def _(mo):
 
 
 @app.cell
-def _(mo, query_params):
-    # Give the user the option to load data from a URL or from Cirro
-    # If a Cirro domain is provided in query params, then that will be the default
-    data_source_ui = mo.ui.radio(
-        {
-            "URL": "url",
-            "Cirro": "cirro"
-        },
-        label="Read Data From",
-        value=("Cirro" if query_params.get("domain") is not None else "URL")
-    )
-    data_source_ui
-    return (data_source_ui,)
-
-
-@app.cell
-def _(mo):
-    # Use a state element to update the DataFrame once it has been read in
-    get_df, set_df = mo.state(None)
-    return get_df, set_df
-
-
-@app.cell
-def _(data_source_ui, mo, query_params):
-    # Stop execution if the user did not select the URL option
-    mo.stop(data_source_ui.value != "url")
-
-    # Let the user enter the URL
-    url_ui = mo.ui.text(
-        label="Load Data from URL (CSV)",
-        placeholder="--",
-        value=query_params.get("url", ""),
-        on_change=lambda v: query_params.set("url", v)
-    )
-    url_ui
-    return (url_ui,)
-
-
-@app.cell
-def _(pd, sep_ui, set_df, url_ui):
-    # If the URL was provided, read it in
-    if url_ui.value is not None and len(url_ui.value) > 0:
-        set_df(pd.read_csv(url_ui.value, sep=dict(comma=",", tab="\t", space=" ")[sep_ui.value]))
-    return
-
-
-@app.cell
 def _(mo):
     # Use a state element to manage the Cirro client object
     get_client, set_client = mo.state(None)
@@ -180,10 +145,7 @@ def _(mo):
 
 
 @app.cell
-def _(data_source_ui, domain_to_name, mo, query_params, tenants_by_name):
-    # If Cirro is not selected, stop any further execution of cells that depend on this output
-    mo.stop(data_source_ui.value != "cirro")
-
+def _(domain_to_name, mo, query_params, tenants_by_name):
     # Let the user select which tenant to log in to (using displayName)
     domain_ui = mo.ui.dropdown(
         options=tenants_by_name,
@@ -223,11 +185,10 @@ def _(cirro_login, set_client):
 
 
 @app.cell
-def _(data_source_ui, get_client, mo):
+def _(get_client, mo):
     # Get the Cirro client object (but only take action if the user selected Cirro as the input)
     client = get_client()
     mo.stop(client is None)
-    mo.stop(data_source_ui.value != "cirro")
     return (client,)
 
 
@@ -268,7 +229,7 @@ def _(id_to_name, mo, name_to_id, projects, query_params):
 
 
 @app.cell
-def _(client, mo, project_ui):
+def _(cirro_dataset_type_filter, client, mo, project_ui):
     # Stop if the user has not selected a project
     mo.stop(project_ui.value is None)
 
@@ -277,12 +238,7 @@ def _(client, mo, project_ui):
     datasets = [
         dataset
         for dataset in client.get_project_by_id(project_ui.value).list_datasets()
-        if dataset.process_id in [
-            "process-hutch-differential-expression-1_0",
-            "process-hutch-differential-expression-custom-1_0",
-            "differential-expression-table",
-            "process-nf-core-differentialabundance-1_5"
-        ]
+        if dataset.process_id in cirro_dataset_type_filter
     ]
     return (datasets,)
 
@@ -342,29 +298,20 @@ def _(mo, query_params):
 
 
 @app.cell
-def _(client, dataset_ui, file_ui, project_ui, sep_ui, set_df):
+def _(client, dataset_ui, file_ui, mo, project_ui, sep_ui):
     # If the file was selected
-    if file_ui.value is not None:
-        # Read the table and set the state
-        set_df(
-            (
-                client
-                .get_project_by_id(project_ui.value)
-                .get_dataset_by_id(dataset_ui.value)
-                .list_files()
-                .get_by_id(file_ui.value)
-                # Set the delimiter used to read the file based on the menu selection
-                .read_csv(sep=dict(comma=",", tab="\t", space=" ")[sep_ui.value])
-            )
-        )
-    return
+    mo.stop(file_ui.value is None)
 
-
-@app.cell
-def _(get_df, mo):
-    # Access the state element to get the DataFrame from either the URL or Cirro route
-    df = get_df()
-    mo.stop(df is None)
+    # Read the table
+    df = (
+        client
+        .get_project_by_id(project_ui.value)
+        .get_dataset_by_id(dataset_ui.value)
+        .list_files()
+        .get_by_id(file_ui.value)
+        # Set the delimiter used to read the file based on the menu selection
+        .read_csv(sep=dict(comma=",", tab="\t", space=" ")[sep_ui.value])
+    )
     return (df,)
 
 
