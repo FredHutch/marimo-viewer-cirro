@@ -1,6 +1,17 @@
 # Marimo Viewer: Cirro
 Visualization of data managed in the Cirro data platform
 
+The simple [marimo](https://marimo.io) app contained in this repository
+includes the code needed to:
+
+- Load the Cirro client library
+- Authenticate the user's identity
+- Select the Cirro project containing the data of interest
+- Select the specific dataset to load
+- Select a single file from that dataset
+
+This provides a starting place for building any type of visualization app
+which loads data stored within the user's Cirro account.
 
 ## Development
 
