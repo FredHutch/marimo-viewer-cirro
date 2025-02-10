@@ -1,5 +1,5 @@
-# CUT&RUN Viewer
-Visualization of CUT&RUN results
+# Marimo Viewer: Cirro
+Visualization of data managed in the Cirro data platform
 
 
 ## Development
