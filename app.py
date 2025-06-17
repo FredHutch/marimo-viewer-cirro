@@ -57,12 +57,15 @@ async def _(micropip, mo, running_in_wasm):
             micropip.uninstall("urllib3")
             micropip.uninstall("httpx")
             await micropip.install("urllib3==2.3.0")
-            await micropip.install("botocore==1.36.23")
+            micropip.uninstall("requests")
+            await micropip.install("requests==2.32.3")
+            await micropip.install("httpx==0.26.0")
+            await micropip.install("botocore==1.37.3")
             await micropip.install("jmespath==1.0.1")
             await micropip.install("s3transfer==0.11.3")
-            await micropip.install("boto3==1.36.23")
-            await micropip.install("aiobotocore==2.20.0")
-            await micropip.install("cirro[pyodide]==1.2.16")
+            await micropip.install("boto3==1.37.3")
+            await micropip.install("aiobotocore==2.22.0")
+            await micropip.install("cirro[pyodide]==1.5.4")
 
         from io import StringIO, BytesIO
         from queue import Queue
@@ -76,20 +79,17 @@ async def _(micropip, mo, running_in_wasm):
         from urllib.parse import quote_plus
 
         from cirro import DataPortalLogin
-        from cirro.services.file import FileService
-        from cirro.sdk.file import DataPortalFile
         from cirro.config import list_tenants
 
         # A patch to the Cirro client library is applied when running in WASM
         if running_in_wasm:
             from cirro.helpers import pyodide_patch_all
             pyodide_patch_all()
+
     return (
         BytesIO,
-        DataPortalFile,
         DataPortalLogin,
         Dict,
-        FileService,
         Optional,
         Queue,
         StringIO,
